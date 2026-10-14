@@ -1,0 +1,5 @@
+model,dataset,n,abnormal,AUROC,lo,hi,Sensitivity,Specificity,best_threshold_here
+CNN,PTB-XL test (matched conditions),1059,201,0.978,0.966,0.987,0.9,0.927,0.628
+CNN,CPSC 2018 (external),4349,3431,0.92,0.911,0.928,0.76,0.891,0.23
+ResNet,PTB-XL test (matched conditions),1059,201,0.977,0.964,0.987,0.945,0.903,0.696
+ResNet,CPSC 2018 (external),4349,3431,0.92,0.911,0.928,0.783,0.873,0.204

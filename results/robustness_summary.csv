@@ -1,0 +1,9 @@
+test,AUROC
+"PTB-XL test, 12 leads (reference)",0.943
+Moderate noise (SD 0.3),0.941
+"Heavy noise (SD 1.0, SNR ~0 dB)",0.92
+"Strong baseline wander, filtered (amp 4)",0.927
+"6 limb leads, retrained",0.919
+"Lead I only, retrained",0.88
+PTB-XL test (matched conditions),0.978
+CPSC 2018 external,0.92

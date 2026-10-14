@@ -1,0 +1,7 @@
+Task,Model,Mean AUROC,SD,Ensemble AUROC
+binary,cnn,0.939,0.001,0.943
+binary,resnet,0.937,0.001,0.941
+multi,cnn,0.927,0.003,0.933
+multi,resnet,0.927,0.001,0.933
+binary,xgboost (baseline),0.917,,
+multi,xgboost (baseline),0.907,,

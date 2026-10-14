@@ -1,0 +1,26 @@
+code,description,class,n,missed,miss_rate
+NORM,normal ECG,NORM,51,28,0.55
+IVCD,non-specific intraventricular conduction disturbance (block),CD,79,32,0.41
+AMI,anterior myocardial infarction,MI,35,10,0.29
+LPFB,left posterior fascicular block,CD,18,4,0.22
+IMI,inferior myocardial infarction,MI,267,51,0.19
+LAO/LAE,left atrial overload/enlargement,HYP,42,8,0.19
+NDT,non-diagnostic T abnormalities,STTC,182,33,0.18
+IRBBB,incomplete right bundle branch block,CD,112,20,0.18
+LVH,left ventricular hypertrophy,HYP,214,32,0.15
+LMI,lateral myocardial infarction,MI,20,3,0.15
+NST_,non-specific ST changes,STTC,77,11,0.14
+1AVB,first degree AV block,CD,79,10,0.13
+ISCIN,ischemic in inferior leads,STTC,22,2,0.09
+ALMI,anterolateral myocardial infarction,MI,27,2,0.07
+ASMI,anteroseptal myocardial infarction,MI,234,11,0.05
+LAFB,left anterior fascicular block,CD,162,6,0.04
+ILMI,inferolateral myocardial infarction,MI,48,2,0.04
+ISC_,non-specific ischemic,STTC,128,1,0.01
+DIG,digitalis-effect,STTC,18,0,0.0
+ISCAL,ischemic in anterolateral leads,STTC,66,0,0.0
+CLBBB,complete left bundle branch block,CD,54,0,0.0
+CRBBB,complete right bundle branch block,CD,54,0,0.0
+INJAS,subendocardial injury in anteroseptal leads,MI,22,0,0.0
+ISCIL,ischemic in inferolateral leads,STTC,18,0,0.0
+ISCAS,ischemic in anteroseptal leads,STTC,17,0,0.0

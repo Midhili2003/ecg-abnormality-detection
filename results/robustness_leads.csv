@@ -1,0 +1,8 @@
+leads,approach,AUROC,lo,hi,Sensitivity,Specificity
+12 leads,Original model,0.943,0.934,0.952,0.819,0.918
+6 limb leads,"12-lead model, leads blanked",0.886,,,,
+6 limb leads,Retrained on these leads,0.919,0.908,0.93,0.819,0.845
+Leads I + II,"12-lead model, leads blanked",0.839,,,,
+Leads I + II,Retrained on these leads,0.921,0.91,0.932,0.817,0.877
+Lead I only (smartwatch),"12-lead model, leads blanked",0.682,,,,
+Lead I only (smartwatch),Retrained on these leads,0.88,0.866,0.893,0.667,0.932

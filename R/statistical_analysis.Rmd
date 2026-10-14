@@ -1,0 +1,236 @@
+---
+title: "Statistical Evaluation of ECG Abnormality Detection Models"
+subtitle: "PTB-XL test set (n = 2,158): confidence intervals, DeLong and McNemar tests, subgroup analysis and calibration"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: kable
+params:
+  results_dir: "results"
+  metadata_csv: "data_processed/metadata.csv"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 7, fig.height = 4.5)
+```
+
+This report reproduces the Phase 4 analysis. It reads the prediction files written by the Python notebooks
+(`results/`) and the patient metadata from Phase 1 (`data_processed/metadata.csv`). Set the two paths in the
+`params` block above (or knit with parameters) to wherever those files live, for example a Google Drive for
+desktop folder.
+
+# Setup
+
+```{r packages}
+pkgs <- c('pROC', 'dplyr', 'tidyr', 'readr', 'ggplot2')
+missing <- pkgs[!pkgs %in% rownames(installed.packages())]
+if (length(missing)) install.packages(missing, quiet = TRUE)
+invisible(lapply(pkgs, library, character.only = TRUE))
+
+RES <- params$results_dir
+FIGS <- file.path(RES, 'figures')
+dir.create(FIGS, showWarnings = FALSE, recursive = TRUE)
+set.seed(42)
+```
+
+# 1. Baseline models: AUROC with bootstrap CIs and DeLong test
+
+```{r baseline-auroc}
+b <- read_csv(file.path(RES, 'preds_test_baseline_binary.csv'), show_col_types = FALSE)
+roc_lr  <- roc(b$y_true, b$p_LogReg,  levels = c(0, 1), direction = '<', quiet = TRUE)
+roc_xgb <- roc(b$y_true, b$p_XGBoost, levels = c(0, 1), direction = '<', quiet = TRUE)
+
+for (m in list(list('LogReg', roc_lr), list('XGBoost', roc_xgb))) {
+  ci <- ci.auc(m[[2]], method = 'bootstrap', boot.n = 2000)
+  cat(sprintf('%-8s AUROC %.3f (95%% CI %.3f-%.3f)\n', m[[1]], ci[2], ci[1], ci[3]))
+}
+roc.test(roc_lr, roc_xgb, method = 'delong', paired = TRUE)
+```
+
+# 2. Patient metadata and age bands
+
+```{r metadata}
+meta <- read_csv(params$metadata_csv, show_col_types = FALSE)
+test <- b %>%
+  inner_join(select(meta, -abnormal), by = 'ecg_id') %>%
+  mutate(age_band = cut(age, c(-Inf, 40, 60, 75, Inf), right = FALSE,
+                        labels = c('<40', '40-59', '60-74', '75+')))
+table(test$sex)
+table(test$age_band)
+```
+
+# 3. Operating-point metrics and McNemar's test
+
+Sensitivity and specificity at each model's threshold chosen on the validation set, with 2,000-sample bootstrap CIs.
+
+```{r operating-point}
+thr <- read_csv(file.path(RES, 'baseline_binary_metrics.csv'), show_col_types = FALSE)
+thr <- setNames(thr$Threshold, thr[[1]])
+
+op_point <- function(y, p, t, B = 2000) {
+  stat <- function(i) { pred <- p[i] >= t; c(Sensitivity = mean(pred[y[i] == 1]), Specificity = mean(!pred[y[i] == 0])) }
+  est <- stat(seq_along(y))
+  ci <- apply(replicate(B, stat(sample(length(y), replace = TRUE))), 1, quantile, c(0.025, 0.975))
+  sprintf('%.3f (%.3f-%.3f)', est, ci[1, ], ci[2, ]) |> setNames(names(est))
+}
+
+for (m in c('LogReg', 'XGBoost')) {
+  op <- op_point(test$y_true, test[[paste0('p_', m)]], thr[m])
+  cat(m, ':', paste(names(op), op, collapse = ' | '), '\n')
+}
+
+correct_lr  <- (test$p_LogReg  >= thr['LogReg'])  == test$y_true
+correct_xgb <- (test$p_XGBoost >= thr['XGBoost']) == test$y_true
+table(LogReg_correct = correct_lr, XGBoost_correct = correct_xgb)
+mcnemar.test(table(correct_lr, correct_xgb))
+```
+
+# 4. Baseline subgroup analysis
+
+```{r subgroup-functions}
+subgroup_auc <- function(df, score) {
+  groups <- list(Overall = rep(TRUE, nrow(df)), Male = df$sex == 'M', Female = df$sex == 'F')
+  for (a in levels(df$age_band)) groups[[paste('Age', a)]] <- df$age_band == a
+  bind_rows(lapply(names(groups), function(g) {
+    d <- df[groups[[g]], ]
+    ci <- ci.auc(roc(d$y_true, d[[score]], levels = c(0, 1), direction = '<', quiet = TRUE))
+    tibble(group = g, n = nrow(d), auc = ci[2], lo = ci[1], hi = ci[3])
+  }))
+}
+
+forest_plot <- function(sg, title, file) {
+  sg$group <- factor(sg$group, levels = rev(sg$group))
+  p <- ggplot(sg, aes(auc, group)) +
+    geom_vline(xintercept = sg$auc[sg$group == 'Overall'], linetype = 2, colour = 'grey50') +
+    geom_errorbar(aes(xmin = lo, xmax = hi), width = 0.2, orientation = 'y') +
+    geom_point(size = 2.5) +
+    geom_text(aes(label = sprintf('%.3f  (n=%d)', auc, n)), nudge_y = 0.3, size = 3) +
+    labs(x = 'AUROC (95% CI)', y = NULL, title = title) +
+    theme_minimal(base_size = 12)
+  ggsave(file.path(FIGS, file), p, width = 7, height = 4.5, dpi = 150)
+  p
+}
+```
+
+```{r subgroup-xgboost}
+sg_xgb <- subgroup_auc(test, 'p_XGBoost')
+sg_xgb
+forest_plot(sg_xgb, 'XGBoost baseline: subgroup performance (test set)', 'subgroups_xgboost.png')
+
+sapply(c('MI', 'STTC', 'CD', 'HYP'), function(c) round(mean(test$p_XGBoost[test[[c]] == 1] >= thr['XGBoost']), 3))
+```
+
+## Investigating the age gap
+
+```{r age-gap}
+test %>%
+  group_by(age_band) %>%
+  summarise(n = n(), abnormal_rate = mean(y_true),
+            sensitivity = mean(p_XGBoost[y_true == 1] >= thr['XGBoost']),
+            specificity = mean(p_XGBoost[y_true == 0] <  thr['XGBoost'])) %>%
+  mutate(across(where(is.double), ~ round(.x, 3)))
+
+young <- test$age_band == '<40'
+r_young <- roc(test$y_true[young],  test$p_XGBoost[young],  levels = c(0, 1), direction = '<', quiet = TRUE)
+r_older <- roc(test$y_true[!young], test$p_XGBoost[!young], levels = c(0, 1), direction = '<', quiet = TRUE)
+roc.test(r_young, r_older, method = 'delong', paired = FALSE)
+
+young_abn <- test %>% filter(age_band == '<40', y_true == 1) %>% mutate(missed = p_XGBoost < thr['XGBoost'])
+sapply(c('MI', 'STTC', 'CD', 'HYP'), function(c) {
+  idx <- young_abn[[c]] == 1
+  c(n = sum(idx), missed = sum(young_abn$missed[idx]), miss_rate = round(mean(young_abn$missed[idx]), 2))
+})
+```
+
+# 5. Calibration
+
+```{r calibration-function}
+calibration <- function(y, p, model) {
+  p <- pmin(pmax(p, 1e-6), 1 - 1e-6)
+  fit <- glm(y ~ qlogis(p), family = binomial)
+  bins <- tibble(y, p) %>% mutate(bin = ntile(p, 10)) %>%
+    group_by(bin) %>% summarise(pred = mean(p), obs = mean(y), n = n(), .groups = 'drop')
+  list(stats = tibble(model, brier = mean((p - y)^2), intercept = coef(fit)[1], slope = coef(fit)[2]),
+       bins = mutate(bins, model = model))
+}
+
+reliability_plot <- function(cal, title, file) {
+  p <- ggplot(bind_rows(lapply(cal, `[[`, 'bins')), aes(pred, obs, colour = model)) +
+    geom_abline(linetype = 2, colour = 'grey50') + geom_line() + geom_point() +
+    coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+    labs(x = 'Predicted probability of abnormal', y = 'Observed fraction abnormal', title = title, colour = NULL) +
+    theme_minimal(base_size = 12)
+  ggsave(file.path(FIGS, file), p, width = 6.5, height = 5, dpi = 150)
+  p
+}
+```
+
+# 6. All models: AUROC, operating points and DeLong tests
+
+```{r all-models}
+d <- read_csv(file.path(RES, 'preds_test_deep_binary.csv'), show_col_types = FALSE)
+dt <- read_csv(file.path(RES, 'deep_thresholds.csv'), show_col_types = FALSE)
+thr_all <- c(thr, CNN = dt$Threshold[dt[[1]] == 'cnn'], ResNet = dt$Threshold[dt[[1]] == 'resnet'])
+
+all <- test %>% inner_join(select(d, ecg_id, p_cnn, p_resnet, p_cnn_cal, p_resnet_cal), by = 'ecg_id')
+models <- c(LogReg = 'p_LogReg', XGBoost = 'p_XGBoost', CNN = 'p_cnn', ResNet = 'p_resnet')
+rocs <- lapply(models, function(col) roc(all$y_true, all[[col]], levels = c(0, 1), direction = '<', quiet = TRUE))
+
+bind_rows(lapply(names(rocs), function(m) {
+  ci <- ci.auc(rocs[[m]], method = 'bootstrap', boot.n = 2000)
+  op <- op_point(all$y_true, all[[models[[m]]]], thr_all[m])
+  tibble(model = m, AUROC = sprintf('%.3f (%.3f-%.3f)', ci[2], ci[1], ci[3]),
+         Sensitivity = op['Sensitivity'], Specificity = op['Specificity'])
+}))
+
+pairs <- list(c('ResNet', 'CNN'), c('ResNet', 'XGBoost'), c('CNN', 'XGBoost'))
+delong <- bind_rows(lapply(pairs, function(pr) {
+  t <- roc.test(rocs[[pr[1]]], rocs[[pr[2]]], method = 'delong', paired = TRUE)
+  tibble(comparison = paste(pr, collapse = ' vs '),
+         auc_diff = round(unname(t$estimate[1] - t$estimate[2]), 4), p = t$p.value)
+})) %>% mutate(p_holm = p.adjust(p, 'holm'))
+write_csv(delong, file.path(RES, 'delong_binary.csv'))
+delong
+```
+
+# 7. Subgroups across models
+
+```{r subgroups-all, fig.width = 10}
+sg_all <- bind_rows(lapply(c('XGBoost', 'CNN', 'ResNet'), function(m) mutate(subgroup_auc(all, models[[m]]), model = m)))
+sg_all$group <- factor(sg_all$group, levels = rev(unique(sg_all$group)))
+sg_all$model <- factor(sg_all$model, levels = c('XGBoost', 'CNN', 'ResNet'))
+
+p <- ggplot(sg_all, aes(auc, group)) +
+  geom_errorbar(aes(xmin = lo, xmax = hi), width = 0.25, orientation = 'y') +
+  geom_point(size = 2) +
+  facet_wrap(~ model, nrow = 1) +
+  labs(x = 'AUROC (95% CI)', y = NULL, title = 'Subgroup performance by model (test set)') +
+  theme_minimal(base_size = 11)
+ggsave(file.path(FIGS, 'subgroups_all_models.png'), p, width = 10, height = 4.5, dpi = 150)
+p
+
+young <- all %>% filter(age_band == '<40', y_true == 1)
+round(sapply(c('XGBoost', 'CNN', 'ResNet'), function(m) c(
+  sens_young_all = mean(young[[models[[m]]]] >= thr_all[m]),
+  sens_young_CD  = mean(young[[models[[m]]]][young$CD == 1] >= thr_all[m]))), 3)
+```
+
+# 8. Calibration across models and after Platt scaling
+
+```{r calibration-all}
+cal_all <- lapply(names(models), function(m) calibration(all$y_true, all[[models[[m]]]], m))
+bind_rows(lapply(cal_all, `[[`, 'stats')) %>% mutate(across(where(is.numeric), ~ round(.x, 3)))
+reliability_plot(cal_all, 'Calibration (test set)', 'calibration_all_models.png')
+
+cols <- c(CNN = 'p_cnn', ResNet = 'p_resnet', CNN_calibrated = 'p_cnn_cal', ResNet_calibrated = 'p_resnet_cal')
+cal_c <- lapply(names(cols), function(m) calibration(all$y_true, all[[cols[[m]]]], m))
+bind_rows(lapply(cal_c, `[[`, 'stats')) %>% mutate(across(where(is.numeric), ~ round(.x, 3)))
+reliability_plot(cal_c, 'Deep models: calibration before and after Platt scaling', 'calibration_platt.png')
+```
+
+# Session information
+
+```{r session}
+sessionInfo()
+```

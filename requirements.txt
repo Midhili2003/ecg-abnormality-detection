@@ -1,0 +1,12 @@
+# Python 3.11+ (developed on Google Colab with a T4 GPU)
+tensorflow>=2.16
+keras>=3.0
+numpy
+pandas
+scipy
+scikit-learn
+xgboost
+wfdb
+neurokit2
+matplotlib
+joblib

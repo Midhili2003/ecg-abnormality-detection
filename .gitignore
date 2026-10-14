@@ -1,0 +1,21 @@
+# Data and large artefacts (download PTB-XL / CPSC 2018 from PhysioNet instead)
+data/
+data_processed/
+*.npy
+*.zip
+*.mat
+*.hea
+*.dat
+models/
+*.keras
+results/deep_preds/
+
+# Python / notebooks
+__pycache__/
+.ipynb_checkpoints/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+R/*.html

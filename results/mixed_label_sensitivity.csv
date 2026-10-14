@@ -1,0 +1,7 @@
+group,labels,n,AUROC,Sensitivity,Specificity
+All ages,all,2158,0.943,0.819,0.918
+All ages,mixed excluded,2107,0.951,0.835,0.918
+Under 40,all,284,0.861,0.485,0.959
+Under 40,mixed excluded,266,0.882,0.479,0.959
+40 and over,all,1874,0.945,0.838,0.905
+40 and over,mixed excluded,1841,0.95,0.85,0.905
